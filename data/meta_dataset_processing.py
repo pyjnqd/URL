@@ -103,7 +103,7 @@ class ImageDecoder(object):
       if self.data_augmentation.enable_random_flip:
         image = tf.image.random_flip_left_right(image)
 
-    # image = 2 * (image / 255.0 - 0.5)  # Rescale to [-1, 1].
+    image = 2 * (image / 255.0 - 0.5)  # Rescale to [-1, 1].
 
     if self.data_augmentation is not None:
       if self.data_augmentation.enable_gaussian_noise:

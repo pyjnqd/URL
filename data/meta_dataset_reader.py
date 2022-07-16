@@ -21,7 +21,7 @@ from meta_dataset.data import config
 ALL_METADATASET_NAMES = "ilsvrc_2012 omniglot aircraft cu_birds dtd quickdraw fungi vgg_flower traffic_sign mscoco mnist cifar10 cifar100".split(' ')
 TRAIN_METADATASET_NAMES = ALL_METADATASET_NAMES[:8]
 TEST_METADATASET_NAMES = ALL_METADATASET_NAMES[-5:]
-ALL_METADATASET_NAMES = ["ilsvrc_2012"]#.split(' ')#"ilsvrc_2012 omniglot aircraft cu_birds dtd quickdraw fungi vgg_flower traffic_sign mscoco".split(' ')
+ALL_METADATASET_NAMES = "traffic_sign".split(' ')#"ilsvrc_2012 omniglot aircraft cu_birds dtd quickdraw fungi vgg_flower traffic_sign mscoco".split(' ')
 SPLIT_NAME_TO_SPLIT = {'train': learning_spec.Split.TRAIN, # vgg_flower traffic_sign mscoco
                        'val': learning_spec.Split.VALID,
                        'test': learning_spec.Split.TEST}
@@ -198,6 +198,11 @@ class MetaDatasetEpisodeReader(MetaDatasetReader):
         return iterator.get_next()
 
     def _init_single_source_dataset(self, dataset_name, split, episode_description):
+        import random
+        seed = 10
+        random.seed(seed)
+        np.random.seed(seed)
+        tf.random.set_seed(seed)
         dataset_spec = self._get_dataset_spec(dataset_name)
         self.specs_dict[split] = dataset_spec
 

@@ -82,9 +82,10 @@ def main():
                 context_labels = sample['context_labels']
                 target_labels = sample['target_labels']
                 # ================================================
-
-                concat_images = torch.cat([context_images, target_images], dim=0)
-
+                context_images_1 = (context_images / 2 + 0.5) * 255
+                # target_images_1 = (target_images / 2 + 0.5) * 255
+                # concat_images = torch.cat([context_images_1, target_images_1], dim=0)
+                concat_images = context_images_1
 
                 from PIL import ImageFilter
                 import random
@@ -103,16 +104,18 @@ def main():
                         return x
 
                 transform_patch = transforms.Compose([
-                    transforms.RandomResizedCrop(42, scale=(0.2, 1.0)),
-                    transforms.RandomApply([
-                        transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
-                    ], p=0.8),
-                    transforms.RandomGrayscale(p=0.2),
-                    transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.5),
-                    transforms.RandomHorizontalFlip(),
+                    # transforms.RandomResizedCrop(42, scale=(0.2, 1.0)),
+                    # transforms.RandomApply([
+                    #     transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
+                    # ], p=0.8),
+                    # transforms.RandomGrayscale(p=0.2),
+                    # transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.5),
+                    # transforms.RandomHorizontalFlip(),
                     transforms.ToTensor(),
-                    transforms.Normalize(np.array([0.485, 0.456, 0.406]),
-                                         np.array([0.229, 0.224, 0.225]))
+                    # transforms.Normalize(np.array([0.485, 0.456, 0.406]),
+                    #                      np.array([0.229, 0.224, 0.225])),
+                    transforms.Normalize(np.array([0.5, 0.5, 0.5]),
+                                         np.array([0.5, 0.5, 0.5]))
                 ])
 
                 to_pil = T.ToPILImage()
@@ -122,8 +125,8 @@ def main():
                     x = x.to(torch.uint8)
                     img = to_pil(x)
                     h, w = img.size
-                    ch = 0.3 * h
-                    cw = 0.3 * w
+                    ch = 0.2 * h
+                    cw = 0.2 * w
                     one_patches = [transform_patch(img.crop((0, 0, h // 2 + ch, w // 2 + cw))),
                                    transform_patch(img.crop((0, w // 2 - cw, h // 2 + ch, w))),
                                    transform_patch(img.crop((h // 2 - ch, 0, h, w // 2 + cw))),
@@ -150,11 +153,26 @@ def main():
 
                 images_gather, permute, bs_all = _batch_gather(patches)
                 # ====================================== 数据 =====================
-                # optimize task-specific adapters and/or pre-classifier alignment
+                # optimize task-specific adapters and/or pre-classifier alignment None,None,None
                 tsa(images_gather, permute, bs_all, context_images, context_labels, model, max_iter=30, lr=lr, lr_beta=lr_beta, distance=args['test.distance'])
                 with torch.no_grad():
-                    context_features = model.embed(sample['context_images'])
-                    target_features = model.embed(sample['target_images'])
+                    import torch.nn.functional as F
+                    avg_pool = torch.nn.AdaptiveAvgPool2d((1, 1))
+                    max_pool = torch.nn.AdaptiveMaxPool2d((2, 2))
+                    context_features = model.embed2(sample['context_images'])
+                    context_features = F.interpolate(context_features, size=(8, 8), mode='bilinear',
+                                                     align_corners=False)
+                    context_features = max_pool(context_features)
+                    # context_features = F.normalize(context_features, dim=1)
+                    context_features = avg_pool(context_features)
+                    context_features = context_features.flatten(1)
+                    target_features = model.embed2(sample['target_images'])
+                    target_features = F.interpolate(target_features, size=(8, 8), mode='bilinear',
+                                                     align_corners=False)
+                    target_features = max_pool(target_features)
+                    # target_features = F.normalize(target_features, dim=1)
+                    target_features = avg_pool(target_features)
+                    target_features = target_features.flatten(1)
                     if 'beta' in args['test.tsa_opt']:
                         context_features = model.beta(context_features)
                         target_features = model.beta(target_features)
@@ -163,9 +181,12 @@ def main():
                     target_features, target_labels, distance=args['test.distance'])
 
                 var_accs[dataset]['NCC'].append(stats_dict['acc'])
-                print('Task {}:{}'.format(str(i), str(stats_dict['acc'])))
+                # print('Task {}:{}'.format(str(i), str(stats_dict['acc'])))
+                dataset_acc = np.array(var_accs[dataset]['NCC']) * 100
+                print(f"{dataset}: test_acc {dataset_acc.mean():.2f}%")
             dataset_acc = np.array(var_accs[dataset]['NCC']) * 100
             print(f"{dataset}: test_acc {dataset_acc.mean():.2f}%")
+
     # Print nice results table
     print('results of {} with {}'.format(args['model.name'], args['test.tsa_opt']))
     rows = []
@@ -188,6 +209,17 @@ def main():
 
 
 if __name__ == '__main__':
+    seed = 10
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    import random
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
+    import os
+    os.environ['TF_DETERMINISTIC_OPS'] = '1'
+    os.environ['PYTHONHASHSEED'] = str(seed)
     main()
 
 
